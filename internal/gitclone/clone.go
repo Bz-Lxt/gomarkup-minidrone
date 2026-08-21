@@ -17,26 +17,24 @@ const (
 )
 
 // Step 根据仓库信息生成 git clone 步骤。branch / commit 为空时跳过对应参数。
+// 只要 repo 非空就返回有效步骤；clone 默认分支后再 checkout 指定提交。
 func Step(repo, branch, commit string) *pipeline.Step {
+	if repo == "" {
+		return nil
+	}
 	var cmds []string
-	var step *pipeline.Step
 	if branch != "" {
 		cmds = append(cmds, fmt.Sprintf("git clone --depth 50 --branch %q %q .", branch, repo))
-		step = &pipeline.Step{}
 	} else {
 		cmds = append(cmds, fmt.Sprintf("git clone --depth 50 %q .", repo))
-		if commit == "" {
-			step = &pipeline.Step{}
-		}
 	}
 	if commit != "" {
 		cmds = append(cmds, fmt.Sprintf("git checkout %q || true", commit))
 	}
-	if step != nil {
-		step.Name = StepName
-		step.Image = Image
-		step.Commands = cmds
-		step.Env = map[string]string{"GIT_TERMINAL_PROMPT": "0"}
+	return &pipeline.Step{
+		Name:     StepName,
+		Image:    Image,
+		Commands: cmds,
+		Env:      map[string]string{"GIT_TERMINAL_PROMPT": "0"},
 	}
-	return step
 }
