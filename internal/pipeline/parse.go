@@ -54,7 +54,7 @@ func LoadDir(dir string) ([]*Pipeline, error) {
 		if e.IsDir() {
 			continue
 		}
-		ext := filepath.Ext(e.Name())
+		ext := strings.ToLower(filepath.Ext(e.Name()))
 		if ext != ".yaml" && ext != ".yml" {
 			continue
 		}
