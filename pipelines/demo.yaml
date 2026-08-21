@@ -1,0 +1,73 @@
+# MiniDrone 演示流水线：Lint -> (Test ∥ Security) -> Build -> Deploy
+# 其中 test 与 security 都依赖 lint，二者并行执行，展示 DAG 调度能力。
+name: demo
+
+env:
+  PROJECT_NAME: minidrone-demo
+
+trigger:
+  repo: "https://github.com/example/minidrone-demo" # Webhook 匹配用，手动触发不校验
+  events: [push, pull_request]
+  branches: [main, develop]
+
+stages:
+  - name: lint
+    steps:
+      - name: static-check
+        image: alpine:3.20
+        commands:
+          - echo "==> 运行静态检查 ($PROJECT_NAME)"
+          - sleep 2
+          - echo "Lint OK"
+
+  - name: test
+    depends_on: [lint]
+    steps:
+      - name: unit-test
+        image: alpine:3.20
+        commands:
+          - echo "==> 单元测试"
+          - sleep 3
+          - echo "42 passed, 0 failed"
+      - name: integration-test
+        image: alpine:3.20
+        commands:
+          - echo "==> 集成测试"
+          - sleep 2
+          - echo "Integration OK"
+
+  - name: security
+    depends_on: [lint]
+    steps:
+      - name: vuln-scan
+        image: alpine:3.20
+        commands:
+          - echo "==> 依赖漏洞扫描"
+          - sleep 4
+          - echo "No vulnerabilities found"
+
+  - name: build
+    depends_on: [test, security]
+    steps:
+      - name: compile
+        image: alpine:3.20
+        timeout: 2m
+        retries: 1
+        retry_delay: 2s
+        artifacts: [dist/app.bin]
+        commands:
+          - echo "==> 编译产物"
+          - mkdir -p dist && echo "binary-v1.0.0" > dist/app.bin
+          - ls -la dist/
+          - 'echo "Build OK, artifact: dist/app.bin"'
+
+  - name: deploy
+    depends_on: [build]
+    steps:
+      - name: publish
+        image: alpine:3.20
+        commands:
+          - echo "==> 部署到生产环境"
+          - cat dist/app.bin
+          - sleep 1
+          - echo "Deploy OK"
