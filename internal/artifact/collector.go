@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"minidrone/internal/executor"
+	"minidrone/internal/pathutil"
 	"minidrone/internal/store"
 )
 
@@ -36,11 +36,15 @@ func (c *Collector) Collect(ctx context.Context, volume, workDir, buildID, stage
 	if len(patterns) == 0 {
 		return nil, nil
 	}
+	safe, err := pathutil.Filter(patterns)
+	if err != nil {
+		return nil, err
+	}
 	dest := c.DestDir(buildID, stage, step)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return nil, fmt.Errorf("创建产物目录失败: %w", err)
 	}
-	if err := c.Exec.CopyOut(ctx, volume, workDir, dest, patterns); err != nil {
+	if err := c.Exec.CopyOut(ctx, volume, workDir, dest, safe); err != nil {
 		return nil, err
 	}
 	return scan(dest, stage, step)
@@ -76,26 +80,11 @@ func scan(dir, stage, step string) ([]store.Artifact, error) {
 }
 
 // SanitizePattern 拒绝含路径穿越的产物模式。
-func SanitizePattern(p string) (string, error) {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return "", fmt.Errorf("空产物路径")
-	}
-	if p == ".." || strings.HasPrefix(p, "../") || strings.HasPrefix(p, "/") {
-		return "", fmt.Errorf("非法产物路径 %q", p)
-	}
-	return p, nil
-}
+//
+// 已迁移至 pathutil 包，此处保留为转发以保持向后兼容。
+var SanitizePattern = pathutil.SanitizePattern
 
 // Filter 过滤并规范化产物路径列表。
-func Filter(patterns []string) ([]string, error) {
-	var out []string
-	for _, p := range patterns {
-		s, err := SanitizePattern(p)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, s)
-	}
-	return out, nil
-}
+//
+// 已迁移至 pathutil 包，此处保留为转发以保持向后兼容。
+var Filter = pathutil.Filter

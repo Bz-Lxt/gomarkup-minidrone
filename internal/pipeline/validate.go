@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"minidrone/internal/dag"
+	"minidrone/internal/pathutil"
 )
 
 // Validate 校验流水线定义的合法性：
@@ -83,8 +84,8 @@ func validateStep(stage string, sp *Step) error {
 		if a == "" {
 			return fmt.Errorf("step %q 存在空的 artifacts 路径", sp.Name)
 		}
-		if len(a) > 0 && (a[0] == '/' || a[0] == '\\') {
-			return fmt.Errorf("step %q 的产物路径必须相对工作区: %s", sp.Name, a)
+		if _, err := pathutil.SanitizePattern(a); err != nil {
+			return fmt.Errorf("step %q 的产物路径非法: %w", sp.Name, err)
 		}
 	}
 	return nil
