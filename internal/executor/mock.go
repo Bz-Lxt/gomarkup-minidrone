@@ -20,12 +20,13 @@ type Script struct {
 
 // Mock 是内存执行器，供调度器单测使用。
 type Mock struct {
-	mu       sync.Mutex
-	scripts  map[string]Script // 按 step 名或 "stage/step" 匹配
-	calls    []RunConfig
-	volumes  map[string]bool
-	copyDirs []string
-	runCount map[string]int
+	mu         sync.Mutex
+	scripts    map[string]Script // 按 step 名或 "stage/step" 匹配
+	calls      []RunConfig
+	volumes    map[string]bool
+	copyDirs   []string
+	runCount   map[string]int
+	CopyOutFn  func(ctx context.Context, volume, workDir, destDir string, patterns []string) error
 }
 
 // NewMock 创建空 mock。
@@ -100,10 +101,18 @@ func (m *Mock) RemoveVolume(_ context.Context, name string) error {
 }
 
 // CopyOut 在 destDir 写入占位文件，模拟产物采集。
-func (m *Mock) CopyOut(_ context.Context, _, _, destDir string, patterns []string) error {
+// 若设置了 CopyOutFn 则委托给它，用于模拟慢采集/取消等场景。
+func (m *Mock) CopyOut(ctx context.Context, volume, workDir, destDir string, patterns []string) error {
 	m.mu.Lock()
 	m.copyDirs = append(m.copyDirs, destDir)
+	fn := m.CopyOutFn
 	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, volume, workDir, destDir, patterns)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
 	}
