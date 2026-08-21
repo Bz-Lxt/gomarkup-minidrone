@@ -79,7 +79,7 @@ func ParseGitHub(r *http.Request, secret string) (*TriggerInfo, error) {
 			Source:  "github",
 			Event:   "push",
 			Repo:    repo,
-			Branch:  strings.TrimLeft(ev.Ref, "refs/heads/"),
+			Branch:  strings.TrimPrefix(ev.Ref, "refs/heads/"),
 			Commit:  ev.After,
 			Message: ev.HeadCommit.Message,
 			Author:  author,
