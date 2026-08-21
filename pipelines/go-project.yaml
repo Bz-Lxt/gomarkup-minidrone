@@ -1,0 +1,35 @@
+# 真实 Go 项目流水线示例：配合 Webhook 或手动触发时填写仓库地址使用。
+# 触发后会先用 alpine/git 把仓库克隆到共享工作区，再按 DAG 执行各阶段。
+name: go-project
+
+trigger:
+  repo: "https://github.com/your-org/your-repo"
+  events: [push, pull_request]
+  branches: [main]
+
+stages:
+  - name: lint
+    steps:
+      - name: go-vet
+        image: golang:1.25-alpine
+        commands:
+          - go vet ./...
+
+  - name: test
+    depends_on: [lint]
+    steps:
+      - name: unit-test
+        image: golang:1.25-alpine
+        commands:
+          - go test -race -cover ./...
+
+  - name: build
+    depends_on: [test]
+    steps:
+      - name: compile
+        image: golang:1.25-alpine
+        env:
+          CGO_ENABLED: "0"
+        commands:
+          - go build -o bin/app ./cmd/...
+          - ls -la bin/
