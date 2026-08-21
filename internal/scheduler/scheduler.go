@@ -418,9 +418,13 @@ func (s *Scheduler) runStepOnce(ctx context.Context, b *store.Build, p *pipeline
 	}
 
 	if len(stepDef.Artifacts) > 0 && s.opts.Artifacts != nil {
-		items, aerr := s.opts.Artifacts.Collect(context.Background(), volume, s.opts.WorkDir, b.ID, st.Name, sp.Name, stepDef.Artifacts)
+		items, aerr := s.opts.Artifacts.Collect(ctx, volume, s.opts.WorkDir, b.ID, st.Name, sp.Name, stepDef.Artifacts)
 		if aerr != nil {
-			s.store.AppendLog(b.ID, st.Name, sp.Name, []byte("[minidrone] 产物采集失败: "+aerr.Error()+"\n"))
+			if ctx.Err() != nil {
+				s.store.AppendLog(b.ID, st.Name, sp.Name, []byte("[minidrone] 产物采集已取消\n"))
+			} else {
+				s.store.AppendLog(b.ID, st.Name, sp.Name, []byte("[minidrone] 产物采集失败: "+aerr.Error()+"\n"))
+			}
 		} else {
 			b.AddArtifacts(items)
 			s.store.AppendLog(b.ID, st.Name, sp.Name, []byte(fmt.Sprintf("[minidrone] 已采集 %d 个产物\n", len(items))))
