@@ -190,9 +190,11 @@ func (s *Scheduler) runBuild(parent context.Context, b *store.Build) {
 
 // runStages 按 DAG 编排阶段执行。
 //
-// 实现方式：每个阶段一个协程，通过每阶段的 done 通道等待全部依赖完成；
-// 依赖中有失败/跳过/取消的，当前阶段标记跳过；信号量限制并行度。
-// 流水线定义已通过无环校验，因此不存在死锁。
+// 实现方式：每个阶段一个协程，先等待全部依赖阶段完成，再竞争信号量执行；
+// 依赖中有失败/跳过/取消的，当前阶段标记跳过。信号量仅限制真正执行阶段的并行度，
+// 不在等待依赖期间占用槽位——否则受限并发下依赖阶段持槽等待被依赖阶段，
+// 而被依赖阶段拿不到槽，形成循环等待导致死锁。
+// 流水线定义已通过无环校验，因此不存在依赖层面的死锁。
 func (s *Scheduler) runStages(ctx context.Context, b *store.Build, p *pipeline.Pipeline, volume string) {
 	stageDefs := make(map[string]*pipeline.Stage, len(p.Stages))
 	for i := range p.Stages {
@@ -213,15 +215,10 @@ func (s *Scheduler) runStages(ctx context.Context, b *store.Build, p *pipeline.P
 			defer wg.Done()
 			defer close(done[st.Name])
 
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				b.Update(func(b *store.Build) { st.State = store.StateCanceled })
-				return
-			}
-
-			// 等待全部依赖阶段结束（通道关闭即终态，且状态写入先于关闭，可见性有保证）
+			// 先等待全部依赖阶段结束，再竞争并行槽。
+			// 若在等待依赖前获取信号量，受限并发下依赖阶段会
+			// 持槽等待被依赖阶段，而被依赖阶段拿不到槽，
+			// 形成循环等待导致死锁。
 			depsFailed := false
 			for _, dep := range st.DependsOn {
 				depCh, ok := done[dep]
@@ -245,6 +242,14 @@ func (s *Scheduler) runStages(ctx context.Context, b *store.Build, p *pipeline.P
 					}
 				})
 				s.publish(b, store.EventStage, st.Name, "", store.StateSkipped)
+				return
+			}
+
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				b.Update(func(b *store.Build) { st.State = store.StateCanceled })
 				return
 			}
 
