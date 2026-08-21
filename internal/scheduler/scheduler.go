@@ -318,10 +318,12 @@ func (s *Scheduler) runStep(ctx context.Context, b *store.Build, p *pipeline.Pip
 	s.publish(b, store.EventStep, st.Name, sp.Name, store.StateRunning)
 
 	stepCtx := ctx
+	var stepTimeout time.Duration
 	if d, err := time.ParseDuration(stepDef.Timeout); err == nil && d > 0 {
 		var cancel context.CancelFunc
 		stepCtx, cancel = context.WithTimeout(ctx, d)
 		defer cancel()
+		stepTimeout = d
 	}
 
 	policy := retry.Policy{
@@ -331,8 +333,13 @@ func (s *Scheduler) runStep(ctx context.Context, b *store.Build, p *pipeline.Pip
 		MaxDelay:    30 * time.Second,
 	}
 	err := policy.Do(stepCtx, func(attempt int) error {
-		return s.runStepOnce(ctx, b, p, stageDef, st, stepDef, sp, volume, attempt)
+		return s.runStepOnce(stepCtx, b, p, stageDef, st, stepDef, sp, volume, attempt)
 	})
+
+	timedOut := stepTimeout > 0 && stepCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+	if timedOut {
+		s.store.AppendLog(b.ID, st.Name, sp.Name, []byte(fmt.Sprintf("[minidrone] 步骤超时（%s），已终止运行中的命令\n", stepTimeout)))
+	}
 
 	if err != nil && stepDef.AllowFailure && ctx.Err() == nil {
 		s.store.AppendLog(b.ID, st.Name, sp.Name, []byte("[minidrone] allow_failure=true，步骤失败不阻断下游\n"))
@@ -400,6 +407,9 @@ func (s *Scheduler) runStepOnce(ctx context.Context, b *store.Build, p *pipeline
 		sp.EndedAt = time.Now()
 		sp.ExitCode = exitCode
 		switch {
+		case err != nil && ctx.Err() == context.DeadlineExceeded:
+			// 步骤级超时：视为失败，而非取消
+			sp.State = store.StateFailed
 		case err != nil && ctx.Err() != nil:
 			sp.State = store.StateCanceled
 		case err != nil || exitCode != 0:
