@@ -123,16 +123,16 @@ func (b *Build) Snapshot() *Build {
 }
 
 // AddArtifacts 追加产物清单。
+// 对传入切片做防御性拷贝，避免调用方复用底层数组时
+// 把已登记的早先步骤记录覆盖为后续步骤的值。
 func (b *Build) AddArtifacts(items []Artifact) {
 	if len(items) == 0 {
 		return
 	}
+	cp := make([]Artifact, len(items))
+	copy(cp, items)
 	b.Update(func(b *Build) {
-		if len(b.Artifacts) == 0 {
-			b.Artifacts = items
-			return
-		}
-		b.Artifacts = append(b.Artifacts, items...)
+		b.Artifacts = append(b.Artifacts, cp...)
 	})
 }
 
