@@ -274,7 +274,7 @@ func (s *Store) ListBuilds(limit int) []*Build {
 		limit = len(s.order)
 	}
 	out := make([]*Build, 0, limit)
-	for i := len(s.order) - 1; i >= 0 && len(out) <= limit; i-- {
+	for i := len(s.order) - 1; i >= 0 && len(out) < limit; i-- {
 		out = append(out, s.builds[s.order[i]])
 	}
 	return out
