@@ -169,13 +169,26 @@ func (s *Scheduler) runBuild(parent context.Context, b *store.Build) {
 
 	s.runStages(ctx, b, p, volume)
 
-	// 汇总最终状态：任一阶段失败则构建失败；被取消则标记取消
+	// 汇总最终状态：任一阶段失败则构建失败；被取消则标记取消。
+	// 额外检查步骤级 failed 状态作为兜底，防止执行器错误被错误地标记为
+	// success 后，整条构建也显示 success。
 	final := store.StateSuccess
 	errMsg := ""
 	b.Update(func(b *store.Build) {
 		for _, st := range b.Stages {
 			if st.State == store.StateFailed {
 				final = store.StateFailed
+				continue
+			}
+			// 兜底：阶段未标记 failed，但其中某步骤为 failed（执行器错误等），
+			// 同样视为构建失败。
+			if final != store.StateFailed {
+				for _, sp := range st.Steps {
+					if sp.State == store.StateFailed {
+						final = store.StateFailed
+						break
+					}
+				}
 			}
 		}
 		if ctx.Err() != nil && final == store.StateSuccess {
@@ -410,7 +423,9 @@ func (s *Scheduler) runStepOnce(ctx context.Context, b *store.Build, p *pipeline
 	})
 	s.publish(b, store.EventStep, st.Name, sp.Name, sp.State)
 
-	if err != nil && exitCode != 0 {
+	// 执行器返回错误（如连接中断、容器运行错误）时必须向上传播，
+	// 即使退出码为 0 也要终止流水线，避免"步骤已 failed 但构建最终 success"。
+	if err != nil {
 		return err
 	}
 	if exitCode != 0 {

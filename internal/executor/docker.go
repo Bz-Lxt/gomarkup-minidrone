@@ -153,7 +153,13 @@ func (d *Docker) Run(ctx context.Context, cfg RunConfig, logs io.Writer) (int, e
 	case st := <-statusCh:
 		<-logsDone
 		if st.Error != nil {
-			return int(st.StatusCode), fmt.Errorf("容器运行错误: %s", st.Error.Message)
+			// 容器等待返回错误信息（如连接中断）。此时退出码可能为 0，
+			// 用 -1 表示无法获取有效退出码，避免调度器误判为成功。
+			code := int(st.StatusCode)
+			if code == 0 {
+				code = -1
+			}
+			return code, fmt.Errorf("容器运行错误: %s", st.Error.Message)
 		}
 		return int(st.StatusCode), nil
 	}
