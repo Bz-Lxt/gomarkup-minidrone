@@ -51,13 +51,13 @@ func (d *Docker) CopyOut(ctx context.Context, volume, workDir, destDir string, p
 	if err != nil {
 		return fmt.Errorf("创建产物采集容器失败: %w", err)
 	}
+	defer func() {
+		_ = d.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
+	}()
 
 	if err := d.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("启动产物采集容器失败: %w", err)
 	}
-	defer func() {
-		_ = d.cli.ContainerRemove(context.Background(), resp.ID, container.RemoveOptions{Force: true})
-	}()
 	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	select {
 	case <-ctx.Done():
