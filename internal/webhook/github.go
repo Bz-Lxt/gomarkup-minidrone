@@ -99,7 +99,7 @@ func ParseGitHub(r *http.Request, secret string) (*TriggerInfo, error) {
 			Source:  "github",
 			Event:   "pull_request",
 			Repo:    ev.PullRequest.Head.Repo.CloneURL,
-			Branch:  ev.PullRequest.Head.Ref,
+			Branch:  ev.PullRequest.Base.Ref,
 			Commit:  ev.PullRequest.Head.SHA,
 			Message: ev.PullRequest.Title,
 			Author:  ev.PullRequest.User.Login,
