@@ -59,6 +59,8 @@ func New(exec executor.Executor, st *store.Store, opts Options) *Scheduler {
 }
 
 // Start 启动 worker 协程池，直到 ctx 取消。
+// 每个 worker 串行处理构建：只有当前构建结束后才会从队列取下一个，
+// 因此 Workers 的值就是整个服务允许并发执行的构建数上限。
 func (s *Scheduler) Start(ctx context.Context) {
 	for i := 0; i < s.opts.Workers; i++ {
 		s.wg.Add(1)
@@ -69,7 +71,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case b := <-s.queue:
-					go s.runBuild(ctx, b)
+					s.runBuild(ctx, b)
 				}
 			}
 		}(i)
